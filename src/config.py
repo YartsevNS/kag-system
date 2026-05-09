@@ -10,6 +10,8 @@ from typing import Dict, Any
 class Settings(BaseSettings):
     """Настройки приложения"""
 
+    APP_VERSION: str = "0.3.0"
+
     # FastAPI
     FASTAPI_HOST: str = "0.0.0.0"
     FASTAPI_PORT: int = 8000
@@ -17,7 +19,7 @@ class Settings(BaseSettings):
     FASTAPI_WORKERS: int = 4
 
     # Qdrant
-    QDRANT_HOST: str = "localhost"
+    QDRANT_HOST: str = "kag-qdrant"
     QDRANT_PORT: int = 6333
     QDRANT_COLLECTION: str = "kag_documents"
 
@@ -124,6 +126,11 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "json"
 
+    # Безопасность
+    AUTH_ENABLED: bool = False
+    KAG_API_TOKEN: str = ""
+    CORS_ORIGINS: str = "*"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
@@ -192,7 +199,7 @@ def get_settings() -> Settings:
     """Получить кэшированные настройки"""
     s = Settings()
     # Override from environment if set (for Docker), otherwise use defaults
-    # Force localhost for local development
-    if s.QDRANT_HOST == "qdrant":
-        s.QDRANT_HOST = "localhost"
+    # Only use localhost if explicitly set or if qdrant (legacy)
+    if s.QDRANT_HOST == "qdrant" or s.QDRANT_HOST == "localhost":
+        s.QDRANT_HOST = "kag-qdrant"
     return s

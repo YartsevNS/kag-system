@@ -149,34 +149,39 @@ class SSHConnectionManager:
         Протестировать SSH подключение.
         """
         import subprocess
-        
+
         try:
-            # Формируем команду с sshpass для автоматической передачи пароля
-            if config.password:
-                ssh_cmd = f"sshpass -p '{config.password}' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 -p {config.port} {config.username}@{config.host}"
-            else:
-                ssh_cmd = f"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 -p {config.port} {config.username}@{config.host}"
-            
-            # Тестируем подключение
+            ssh_args = [
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "UserKnownHostsFile=/dev/null",
+                "-o", "ConnectTimeout=10",
+                "-p", str(config.port),
+                f"{config.username}@{config.host}",
+            ]
+
             if config.sudo_password:
-                test_cmd = f"{ssh_cmd} 'echo {config.sudo_password} | sudo -S echo OK'"
+                remote_cmd = f"echo {config.sudo_password} | sudo -S echo OK"
             else:
-                test_cmd = f"{ssh_cmd} 'echo OK'"
-            
-            logger.debug(f"Тест SSH: {test_cmd}")
-            
+                remote_cmd = "echo OK"
+            ssh_args.append(remote_cmd)
+
+            if config.password:
+                cmd = ["sshpass", "-p", config.password, "ssh"] + ssh_args
+            else:
+                cmd = ["ssh"] + ssh_args
+
+            logger.debug(f"Тест SSH: host={config.host}, port={config.port}, user={config.username}")
+
             result = subprocess.run(
-                test_cmd,
-                shell=True,
+                cmd,
                 capture_output=True,
                 text=True,
                 timeout=20
             )
-            
+
             logger.debug(f"SSH результат: returncode={result.returncode}")
-            
+
             if result.returncode == 0:
-                # Проверяем Ollama
                 import httpx
                 try:
                     response = httpx.get(
@@ -184,9 +189,9 @@ class SSHConnectionManager:
                         timeout=10.0
                     )
                     ollama_healthy = response.status_code == 200
-                except:
+                except Exception:
                     ollama_healthy = False
-                
+
                 return {
                     "success": True,
                     "ssh_connected": True,
@@ -199,7 +204,7 @@ class SSHConnectionManager:
                     "ssh_connected": False,
                     "message": f"SSH ошибка: {result.stderr.strip()[:300]}"
                 }
-                
+
         except subprocess.TimeoutExpired:
             return {
                 "success": False,

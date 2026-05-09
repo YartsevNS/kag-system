@@ -68,7 +68,7 @@ RUN groupadd -f docker && usermod -aG docker kag
 
 # Создание директорий для данных
 RUN mkdir -p /app/data/audit /app/data/annotations /app/data/quality_tracking /app/data/ab_tests /app/.ssh && \
-    chmod -R 777 /app/data && \
+    chmod -R 750 /app/data && \
     chmod 700 /app/.ssh && \
     chown -R kag:kag /app/data
 

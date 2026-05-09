@@ -314,9 +314,21 @@ class EmbeddingsService:
 
             logger.info(f"Документ удален из Qdrant: {document_id}")
             return True
-
         except Exception as e:
             logger.error(f"Ошибка удаления документа: {e}")
+            return False
+
+    async def delete_all(self) -> bool:
+        """Удалить все чанки из Qdrant"""
+        try:
+            self._qdrant_client.delete(
+                collection_name=self.collection_name,
+                points_selector=Filter(must=[])
+            )
+            logger.info("Все документы удалены из Qdrant")
+            return True
+        except Exception as e:
+            logger.error(f"Ошибка очистки Qdrant: {e}")
             return False
 
     async def get_collection_stats(self) -> Dict[str, Any]:

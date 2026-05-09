@@ -163,7 +163,6 @@ class SecurityValidator:
         if file_size == 0:
             raise SecurityValidationError("Пустой файл", "file")
 
-        # Проверка расширения
         ext = Path(filename).suffix.lower()
         if ext not in ALLOWED_EXTENSIONS:
             raise SecurityValidationError(
@@ -171,23 +170,17 @@ class SecurityValidator:
                 "file"
             )
 
-        # Проверка MIME типа
         if mime_type and mime_type not in ALLOWED_MIME_TYPES:
             raise SecurityValidationError(
                 f"Недопустимый MIME тип: {mime_type}",
                 "file"
             )
 
-        # Проверка имени файла на опасные символы
         if re.search(r'[<>"\'|?*\\]', filename):
             raise SecurityValidationError(
                 "Имя файла содержит недопустимые символы",
                 "file"
             )
-
-        # Проверка существования файла
-        if not os.path.exists(file_path):
-            raise SecurityValidationError("Файл не существует", "file")
 
         logger.debug(f"Файл валидирован: {filename}, размер: {file_size}")
         return True

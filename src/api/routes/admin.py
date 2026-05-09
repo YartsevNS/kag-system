@@ -8,6 +8,7 @@ from loguru import logger
 from datetime import datetime
 
 from src.models import SystemStatus
+from src.config import get_settings
 
 router = APIRouter()
 
@@ -23,12 +24,12 @@ async def get_system_status():
     - Статусе компонентов (БД, кэш, LLM, очереди)
     """
     logger.debug("Запрос статуса системы")
-    
-    # TODO: Получить реальные статусы компонентов
-    
+
+    settings = get_settings()
+
     return SystemStatus(
         service="kag-api",
-        version="0.1.0",
+        version=settings.APP_VERSION,
         status="running",
         uptime=0.0,
         components={

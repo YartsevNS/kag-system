@@ -10,6 +10,7 @@ from datetime import datetime
 
 from src.models import DocumentUpload, DocumentStatus
 from src.api.services.document_service import document_service
+from src.security.validator import SecurityValidator, SecurityValidationError
 
 router = APIRouter()
 
@@ -35,10 +36,18 @@ async def upload_document(
     logger.info(f"Загрузка документа: {file.filename}, тип: {file.content_type}")
 
     try:
-        # Читаем содержимое файла
         content = await file.read()
 
-        # Загружаем документ (создаёт запись в _documents)
+        try:
+            SecurityValidator.validate_file_upload(
+                file_path="",
+                filename=file.filename or "unknown",
+                file_size=len(content),
+                mime_type=file.content_type
+            )
+        except SecurityValidationError as ve:
+            raise HTTPException(status_code=400, detail=ve.message)
+
         record = await document_service.upload_document(
             filename=file.filename,
             file_content=content,
@@ -92,6 +101,22 @@ async def upload_documents_batch(
     for file in files:
         try:
             content = await file.read()
+
+            try:
+                SecurityValidator.validate_file_upload(
+                    file_path="",
+                    filename=file.filename or "unknown",
+                    file_size=len(content),
+                    mime_type=file.content_type
+                )
+            except SecurityValidationError as ve:
+                results.append({
+                    "filename": file.filename,
+                    "status": "error",
+                    "error": ve.message
+                })
+                continue
+
             record = await document_service.upload_document(
                 filename=file.filename,
                 file_content=content,
@@ -172,7 +197,9 @@ async def list_documents(limit: int = 100):
                 "status": d.status,
                 "progress": d.progress,
                 "chunks_count": d.chunks_count,
-                "created_at": d.created_at.isoformat()
+                "created_at": d.created_at.isoformat() if d.created_at else None,
+                "updated_at": d.updated_at.isoformat() if d.updated_at else None,
+                "uploaded_by": d.uploaded_by
             }
             for d in documents
         ]
@@ -192,6 +219,28 @@ async def delete_document(document_id: str):
         raise HTTPException(status_code=404, detail="Документ не найден")
 
     return {"status": "ok", "document_id": document_id}
+
+
+@router.post("/{document_id}/reindex", summary="Переиндексировать документ")
+async def reindex_document(document_id: str):
+    """
+    Переиндексировать документ (заново создать вектора).
+    """
+    from src.indexing.embeddings_service import embeddings_service
+    await embeddings_service.initialize()
+    
+    try:
+        await document_service.process_document(document_id)
+        record = document_service.get_document(document_id)
+        return {
+            "status": "ok",
+            "document_id": document_id,
+            "chunks_count": record.chunks_count if record else 0
+        }
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Файл документа не найден")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 async def _process_document_async(document_id: str):

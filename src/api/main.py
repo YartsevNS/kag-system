@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from loguru import logger
 import os
 
@@ -18,6 +18,9 @@ from src.api.middleware.setup_checker import SetupCheckMiddleware
 from src.monitoring.opentelemetry import setup_opentelemetry
 from src.monitoring.prometheus import setup_prometheus_metrics
 from src.api.services.model_manager import model_manager
+from src.config import get_settings
+
+settings = get_settings()
 
 
 @asynccontextmanager
@@ -72,18 +75,19 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="KAG API",
     description="API для системы многоагентной обработки знаний (KAG)",
-    version="0.1.0",
+    version=settings.APP_VERSION,
     lifespan=lifespan,
 )
 
 # Middleware для проверки setup (должен быть первым)
 app.add_middleware(SetupCheckMiddleware)
 
-# CORS middleware (optional - for browser)
-if os.getenv("ENABLE_CORS", "false").lower() == "true":
+# CORS middleware (включен для разработки)
+cors_origins = os.getenv("CORS_ORIGINS", "*")
+if cors_origins:
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=os.getenv("CORS_ORIGINS", "*").split(","),
+        allow_origins=[o.strip() for o in cors_origins.split(",")],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -115,7 +119,7 @@ async def root_web():
         return FileResponse(index_path)
     return {
         "service": "KAG API",
-        "version": "0.1.0",
+        "version": settings.APP_VERSION,
         "status": "running",
         "docs": "/docs",
         "web_ui": "/"
@@ -167,10 +171,10 @@ async def qdrant_dashboard():
     return {"error": "Qdrant dashboard not found"}
 
 
-@app.get("/chunks", summary="Чанки документов")
+@app.get("/chunks", summary="Чанки документов", response_class=HTMLResponse)
 async def chunks_page():
     """Страница чанков документов"""
     chunks_path = os.path.join(static_path, "chunks.html")
     if os.path.exists(chunks_path):
-        return FileResponse(chunks_path)
+        return FileResponse(chunks_path, media_type="text/html")
     return {"error": "Chunks page not found"}

@@ -10,30 +10,28 @@
 from typing import Dict, Any, List
 from loguru import logger
 
+from src.config import get_settings
+
 
 class DocumentChunker:
     """
-    Разбиение документов на чанки для векторизации.
-    
+    Единый чанкер документов для векторизации.
+
     Стратегии:
     - По размеру (фиксированное количество токенов/символов)
     - По структуре (абзацы, секции)
     - Семантический (по смысловым границам)
     """
-    
+
     def __init__(
         self,
-        chunk_size: int = 500,
-        chunk_overlap: int = 50
+        chunk_size: int = None,
+        chunk_overlap: int = None
     ):
-        """
-        Args:
-            chunk_size: Размер чанка в символах
-            chunk_overlap: Перекрытие между чанками
-        """
-        self.chunk_size = chunk_size
-        self.chunk_overlap = chunk_overlap
-    
+        settings = get_settings()
+        self.chunk_size = chunk_size or settings.CHUNK_SIZE
+        self.chunk_overlap = chunk_overlap or settings.CHUNK_OVERLAP
+
     def chunk(
         self,
         document: Dict[str, Any],
@@ -41,22 +39,21 @@ class DocumentChunker:
     ) -> List[Dict[str, Any]]:
         """
         Разбить документ на чанки.
-        
+
         Args:
-            document: Распарсенный документ
+            document: Распарсенный документ со списком segments
             file_type: Тип файла
-            
+
         Returns:
             Список чанков с метаданными
         """
         segments = document.get("segments", [])
         chunks = []
-        
+
         for i, segment in enumerate(segments):
             content = segment.get("content", "")
-            
+
             if len(content) <= self.chunk_size:
-                # Сегмент помещается в один чанк
                 chunks.append({
                     "chunk_id": f"chunk_{i}_0",
                     "content": content,
@@ -68,14 +65,48 @@ class DocumentChunker:
                     }
                 })
             else:
-                # Разбиваем на несколько чанков
                 segment_chunks = self._split_content(content, i, segment.get("metadata", {}))
                 chunks.extend(segment_chunks)
-        
+
         logger.info(f"Документ разбит на {len(chunks)} чанков")
-        
         return chunks
-    
+
+    def chunk_segments(
+        self,
+        segments: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        Разбить список сегментов на чанки.
+
+        Args:
+            segments: Список сегментов из парсера
+
+        Returns:
+            Список чанков для векторизации
+        """
+        chunks = []
+
+        for i, segment in enumerate(segments):
+            content = segment.get("content", "")
+            metadata = segment.get("metadata", {})
+
+            if len(content) <= self.chunk_size:
+                chunks.append({
+                    "chunk_id": f"chunk_{len(chunks)}",
+                    "content": content,
+                    "metadata": {
+                        **metadata,
+                        "chunk_index": len(chunks),
+                        "is_partial": False
+                    }
+                })
+            else:
+                segment_chunks = self._split_content(content, i, metadata)
+                chunks.extend(segment_chunks)
+
+        logger.info(f"Сегменты разбиты на {len(chunks)} чанков")
+        return chunks
+
     def _split_content(
         self,
         content: str,
@@ -83,22 +114,21 @@ class DocumentChunker:
         metadata: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
         """Разбить длинный контент на чанки с перекрытием"""
-        
+
         chunks = []
         start = 0
         chunk_index = 0
-        
+
         while start < len(content):
             end = start + self.chunk_size
-            
-            # Пытаемся разбить по границе слова
+
             if end < len(content):
                 space_pos = content.rfind(" ", start + self.chunk_size // 2, end)
                 if space_pos > start:
                     end = space_pos + 1
-            
+
             chunk_text = content[start:end].strip()
-            
+
             if chunk_text:
                 chunks.append({
                     "chunk_id": f"chunk_{segment_index}_{chunk_index}",
@@ -109,11 +139,12 @@ class DocumentChunker:
                         "chunk_index": chunk_index,
                         "total_chunks": (len(content) + self.chunk_size - 1) // self.chunk_size,
                         "start_pos": start,
-                        "end_pos": end
+                        "end_pos": end,
+                        "is_partial": True
                     }
                 })
                 chunk_index += 1
-            
+
             start = end - self.chunk_overlap
-        
+
         return chunks

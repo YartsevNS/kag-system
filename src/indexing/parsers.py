@@ -366,10 +366,8 @@ class DocumentParser:
 class TextChunker:
     """
     Разбиение текста на чанки для векторизации.
-    
-    Стратегии:
-    - По размеру (фиксированное количество символов)
-    - С перекрытием для сохранения контекста
+
+    Делегирует к DocumentChunker для единообразия.
     """
 
     def __init__(
@@ -377,8 +375,11 @@ class TextChunker:
         chunk_size: int = 1000,
         chunk_overlap: int = 200
     ):
-        self.chunk_size = chunk_size
-        self.chunk_overlap = chunk_overlap
+        from src.indexing.chunking import DocumentChunker
+        self._chunker = DocumentChunker(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap
+        )
 
     def chunk_document(self, segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
@@ -390,71 +391,7 @@ class TextChunker:
         Returns:
             Список чанков для векторизации
         """
-        chunks = []
-        
-        for segment in segments:
-            content = segment.get("content", "")
-            metadata = segment.get("metadata", {})
-            
-            if len(content) <= self.chunk_size:
-                # Сегмент помещается в один чанк
-                chunks.append({
-                    "chunk_id": f"chunk_{len(chunks)}",
-                    "content": content,
-                    "metadata": {
-                        **metadata,
-                        "chunk_index": len(chunks),
-                        "is_partial": False
-                    }
-                })
-            else:
-                # Разбиваем на несколько чанков
-                segment_chunks = self._split_content(content, metadata)
-                chunks.extend(segment_chunks)
-
-        logger.info(f"Документ разбит на {len(chunks)} чанков")
-        return chunks
-
-    def _split_content(
-        self,
-        content: str,
-        metadata: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
-        """Разбить длинный текст на чанки с перекрытием"""
-        
-        chunks = []
-        start = 0
-        chunk_index = 0
-
-        while start < len(content):
-            end = start + self.chunk_size
-
-            # Пытаемся разбить по границе слова
-            if end < len(content):
-                space_pos = content.rfind(" ", start + self.chunk_size // 2, end)
-                if space_pos > start:
-                    end = space_pos + 1
-
-            chunk_text = content[start:end].strip()
-
-            if chunk_text:
-                chunks.append({
-                    "chunk_id": f"chunk_{len(chunks)}",
-                    "content": chunk_text,
-                    "metadata": {
-                        **metadata,
-                        "chunk_index": chunk_index,
-                        "start_pos": start,
-                        "end_pos": end,
-                        "char_count": len(chunk_text),
-                        "is_partial": True
-                    }
-                })
-                chunk_index += 1
-
-            start = end - self.chunk_overlap
-
-        return chunks
+        return self._chunker.chunk_segments(segments)
 
 
 # Глобальные экземпляры
